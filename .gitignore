@@ -6,6 +6,7 @@
 *.dylib
 *~
 ff
+fw
 
 # Test binary, build with `go test -c`
 *.test

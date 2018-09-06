@@ -24,10 +24,6 @@ type Walker struct {
 	*Logerr
 }
 
-func P(str string) {
-	fmt.Println(str)
-}
-
 func (w *Walker) String() string {
 	return fmt.Sprintf("roots %v files %d size %d\n", w.Roots, w.Files, w.TotalSize)
 }
@@ -51,7 +47,7 @@ func NewWalker(roots []string) *Walker {
 // filesizes over the sizeChan channel.
 func (w *Walker) WalkDir(path string) {
 
-	//P("walking dir " + path)
+	//w.Debugln("walking dir " + path)
 	w.Debugln("Walking dir ", path)
 
 	// Make sure our wait group is decremented before this
@@ -68,17 +64,17 @@ func (w *Walker) WalkDir(path string) {
 
 			if w.UseDirChan {
 				go func() {
-					P("  chan <- dir " + subdir)
+					w.Debugln("  chan <- dir " + subdir)
 					w.DirChan <- subdir // Do not block writting to channel
 				}()
 
 			} else {
-				P("  walkDir " + subdir)
+				w.Debugln("  walkDir " + subdir)
 				w.Add(1)
 				go w.WalkDir(subdir)
 			}
 		} else {
-			P(" chan <- file " + entry.Name())
+			w.Debugln(" chan <- file " + entry.Name())
 			w.FiChan <- entry
 		}
 	}
@@ -104,9 +100,9 @@ func (w *Walker) StartWalking() {
 	// Wait for all walk functions to complete then close the
 	// sizeChan, when everything completes we will.
 	go func() {
-		P("  Waiting for the wait group ")
+		w.Debugln("  Waiting for the wait group ")
 		w.Wait()
-		P("  Closing File and Directory Channels ")
+		w.Debugln("  Closing File and Directory Channels ")
 		close(w.FiChan)
 		close(w.DirChan)
 	}()
@@ -116,7 +112,7 @@ func (w *Walker) StartWalking() {
 	// at that point.
 	w.Tick = CreateTicker(500*time.Millisecond, w.Verbose)
 
-	P("Starting Stats Loop")
+	w.Debugln("Starting Stats Loop")
 	w.StatsLoop()
 }
 
@@ -127,7 +123,7 @@ func (w *Walker) StatsLoop() {
 			if !ok {
 				return
 			}
-			//P("  read file channel " + fi.Name())
+			w.Debugln("  read file channel " + fi.Name())
 			w.Stats.Update(fi)
 		case path, ok := <-w.DirChan:
 			if !ok {
