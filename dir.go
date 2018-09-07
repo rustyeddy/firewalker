@@ -16,7 +16,7 @@ type Directory struct {
 // Directory at pathname.
 func GetDirectory(path string) (dir *Directory) {
 	dir = &Directory{
-		Node: Node{Path: path},
+		Node: Node{Basedir: path},
 	}
 	return dir
 }

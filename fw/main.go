@@ -31,19 +31,22 @@ var (
 func main() {
 	flag.Parse()
 
-	logerr := setupLogerr()
-
 	walker := fsutils.NewWalker(getRootDirs(flag.Args()))
-	walker.Verbose = true
-	walker.Logerr = logerr
+	walker.Verbose = false
+	walker.Logerr = setupLogerr()
+
+	//log.Fatalf("LOGERR => \n %#v \n", *walker.Logerr.Logger)
 
 	// Start reading messages
 	go walker.ReadMessages(os.Stderr)
 	walker.StartWalking()
+
+	fmt.Println("Main is existing, Goodbye .!. ")
 	fmt.Println(walker.String())
 }
 
-// Much of this can be in the library
+// TODO - Move this to the logerr library ~ Probably pass it a configuration
+// file ...
 func setupLogerr() (l *fsutils.Logerr) {
 	l = fsutils.NewLogerr()
 	if *logout != "stdout" {
@@ -74,14 +77,11 @@ func setupLogerr() (l *fsutils.Logerr) {
 	return l
 }
 
-// getRootDirs will default to current directory
+// getRootDirs will default to current directory, unless
 func getRootDirs(d []string) (roots []string) {
-	roots = flag.Args()
-	if len(roots) == 0 {
-		// We could default to this directory. or Fail
-		// fmt.Fprintf(os.Stderr, "Need arguments to proceed ... ")
-		// We will default to the local directory
-		roots = []string{"."}
+	roots = []string{"."}
+	if len(d) > 0 {
+		roots = d
 	}
 	return roots
 }

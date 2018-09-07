@@ -7,8 +7,8 @@ all:
 build:
 	go build 
 
-buildcmd:
-	go build -o $(cmd)
+buildv:
+	go build -v
 
 run:
 	make -C $(cmd) run

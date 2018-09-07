@@ -31,9 +31,8 @@ func (w *Walker) String() string {
 // NewWalker will create a new directory walker for the given path
 func NewWalker(roots []string) *Walker {
 	w := &Walker{
-		Roots:  roots,
-		Logerr: NewLogerr(),
-
+		Roots:   roots,
+		Logerr:  NewLogerr(),
 		FiChan:  make(chan os.FileInfo),
 		DirChan: make(chan string),
 	}
@@ -74,7 +73,7 @@ func (w *Walker) WalkDir(path string) {
 				go w.WalkDir(subdir)
 			}
 		} else {
-			w.Debugln(" chan <- file " + entry.Name())
+			// w.Debugln(" file chan <- file " + entry.Name())
 			w.FiChan <- entry
 		}
 	}
@@ -142,6 +141,6 @@ func (w *Walker) StatsLoop() {
 			}
 			fmt.Println(w.Stats.String())
 		}
-		//fmt.Printf("%+v", w.Stats)
+		//fmt.Printf("~~ %+v ~~", w.Stats)
 	}
 }

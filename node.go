@@ -8,8 +8,8 @@ import (
 // Node represents an object in the file system, either a directory
 // or a file.
 type Node struct {
-	Path        string
-	os.FileInfo // If this is nil, we are not synced with FS
+	Basedir     string // Path of parent directory
+	os.FileInfo        // If this is nil, we are not synced with FS
 	Err         *Message
 }
 
@@ -19,8 +19,8 @@ type Node struct {
 func (n *Node) Info() (fi os.FileInfo, fserr *Message) {
 	var err error
 	if n.FileInfo == nil {
-		if n.FileInfo, err = os.Stat(n.Path); err != nil {
-			n.Err = ErrorMessage(fmt.Errorf(n.Path + err.Error()))
+		if n.FileInfo, err = os.Stat(n.Basedir); err != nil {
+			n.Err = ErrorMessage(fmt.Errorf(n.Basedir + err.Error()))
 		}
 	}
 	return n.FileInfo, n.Err
