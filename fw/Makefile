@@ -1,8 +1,9 @@
 cmd = fw
+files = *.go
 
 build:
 	make -C .. build
-	go build -o $(cmd) main.go
+	go build -o $(cmd) $(files)
 
 test:
 	go test

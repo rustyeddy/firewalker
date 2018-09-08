@@ -1,22 +1,9 @@
-package fsutils
-
-import (
-	"os"
-)
+package firewalker
 
 // Directory represents a directory
-type Directory struct {
-	Node
-	Subdirs []*Directory
-	Files   []*os.FileInfo
+type Dir struct {
+	Basedir string
+	Subdirs []string
+	Files   []*File
 	Err     error
-}
-
-// GetDirectory will return an object representing the
-// Directory at pathname.
-func GetDirectory(path string) (dir *Directory) {
-	dir = &Directory{
-		Node: Node{Basedir: path},
-	}
-	return dir
 }

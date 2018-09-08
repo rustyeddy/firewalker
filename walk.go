@@ -1,9 +1,8 @@
-package fsutils
+package firewalker
 
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -14,14 +13,20 @@ type Walker struct {
 	Roots []string
 	Stats
 	Verbose bool
+	Filters []Filter
+	Filemap map[string]*File
 
 	sync.WaitGroup
-	FiChan  chan os.FileInfo
+	FiChan  chan *File
 	DirChan chan string
 	Tick    <-chan time.Time
 
 	UseDirChan bool
 	*Logerr
+}
+
+func P(str string) {
+	fmt.Println(str)
 }
 
 func (w *Walker) String() string {
@@ -31,10 +36,13 @@ func (w *Walker) String() string {
 // NewWalker will create a new directory walker for the given path
 func NewWalker(roots []string) *Walker {
 	w := &Walker{
-		Roots:   roots,
-		Logerr:  NewLogerr(),
-		FiChan:  make(chan os.FileInfo),
-		DirChan: make(chan string),
+		Roots:      roots,
+		Logerr:     NewLogerr(),
+		FiChan:     make(chan *File),
+		UseDirChan: false,
+	}
+	if w.UseDirChan {
+		w.DirChan = make(chan string)
 	}
 	w.SetOutput(os.Stderr)
 	w.SetLevel(log.WarnLevel)
@@ -42,41 +50,77 @@ func NewWalker(roots []string) *Walker {
 	return w
 }
 
+// AddFilters will add a new Filter to the filter list the file
+// is going to have to transform to.
+func (w *Walker) AddFilter(f Filter) {
+	w.Filters = append(w.Filters, f)
+}
+
+// Build a filemap
+func (w *Walker) CreateFilemap() {
+	w.Filemap = make(map[string]*File, 1000)
+}
+
 // WalkDir does a recursive walk down a directory, sending
 // filesizes over the sizeChan channel.
 func (w *Walker) WalkDir(path string) {
 
-	//w.Debugln("walking dir " + path)
 	w.Debugln("Walking dir ", path)
 
 	// Make sure our wait group is decremented before this
 	// function returns
 	defer func() {
+		w.Debugln("WG.Done Waiting")
 		w.Done()
 	}()
 
 	// Loop each entry and create more subdir searches.  Making
 	// sure the waitgroup is updated properly
 	for _, entry := range Dirlist(path) {
-		if entry.IsDir() {
-			subdir := filepath.Join(path, entry.Name())
+		w.QEntry(path, entry)
+	}
+}
 
-			if w.UseDirChan {
-				go func() {
-					w.Debugln("  chan <- dir " + subdir)
-					w.DirChan <- subdir // Do not block writting to channel
-				}()
+// QEntry will determine if the entry is a file or directory (or
+// something else) and launch a new search Go routine.
+func (w *Walker) QEntry(path string, entry os.FileInfo) {
+	if entry.IsDir() {
+		w.qdir(path, entry)
+	} else {
+		w.qfile(path, entry)
+	}
+}
 
-			} else {
-				w.Debugln("  walkDir " + subdir)
-				w.Add(1)
-				go w.WalkDir(subdir)
-			}
-		} else {
-			// w.Debugln(" file chan <- file " + entry.Name())
-			w.FiChan <- entry
+func (w *Walker) qfile(path string, entry os.FileInfo) {
+	w.FiChan <- FileFromInfo(path, entry)
+}
+
+// Q up the new directory and
+func (w *Walker) qdir(path string, entry os.FileInfo) {
+	dircomm := func(path string) {
+		defer w.Done()
+		w.WalkDir(path)
+	}
+	if w.UseDirChan {
+		dircomm = func(path string) {
+			defer w.Done()
+			w.DirChan <- path // Do not block writting to channel
 		}
 	}
+
+	w.Add(1)
+	go dircomm(path)
+}
+
+// Walk through the filters transforming the file as needed
+func (w *Walker) Filter(fi *File) (fout *File) {
+	fout = fi
+	for _, filter := range w.Filters {
+		if fout = filter(w, fout); fout == nil {
+			return nil
+		}
+	}
+	return fout
 }
 
 func (w *Walker) StartWalking() {
@@ -103,7 +147,9 @@ func (w *Walker) StartWalking() {
 		w.Wait()
 		w.Debugln("  Closing File and Directory Channels ")
 		close(w.FiChan)
-		close(w.DirChan)
+		if w.UseDirChan {
+			close(w.DirChan)
+		}
 	}()
 
 	// Create a ticker to update the user of progress.  Verbose
@@ -111,36 +157,46 @@ func (w *Walker) StartWalking() {
 	// at that point.
 	w.Tick = CreateTicker(500*time.Millisecond, w.Verbose)
 
-	w.Debugln("Starting Stats Loop")
-	w.StatsLoop()
-}
+	w.Debugln("Starting The Chain Loop")
+	fok, dok, tok := true, false, true
+	if w.UseDirChan {
+		dok = true
+	}
 
-func (w *Walker) StatsLoop() {
 	for {
-		select {
-		case fi, ok := <-w.FiChan:
-			if !ok {
-				return
-			}
-			w.Debugln("  read file channel " + fi.Name())
-			w.Stats.Update(fi)
-		case path, ok := <-w.DirChan:
-			if !ok {
-				return
-			}
-			w.Add(1)
-			w.Stats.Dirs++
-			go w.WalkDir(path)
+		var fi *File
+		var path string
 
-		case _, ok := <-w.Tick:
+		select {
+		case fi, fok = <-w.FiChan:
+			if fok {
+				w.Debugln("  read file channel " + fi.Name())
+				w.Filter(fi)
+			} else {
+				w.Infoln("  File Channel Closed ")
+			}
+
+		case path, dok = <-w.DirChan:
+			if dok {
+				w.Stats.Dirs++
+				w.WalkDir(path)
+			} else {
+				w.Infoln("  Dir Channel Closed")
+			}
+
+		case _, tok = <-w.Tick:
 			// the tick channel will be readable every 1sec (or ...)
 			// it prints an update on os.Stdio for the user.  If
 			// verbose is false, the tick channel is never written to.
-			if !ok {
+			if !tok {
 				w.Warn("The ticker is dead")
 			}
 			fmt.Println(w.Stats.String())
 		}
-		//fmt.Printf("~~ %+v ~~", w.Stats)
+
+		if !(fok || dok) {
+			fmt.Printf("~~ %+v ~~", w.Stats)
+			return
+		}
 	}
 }

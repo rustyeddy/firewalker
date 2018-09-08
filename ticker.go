@@ -1,4 +1,4 @@
-package fsutils
+package firewalker
 
 import "time"
 

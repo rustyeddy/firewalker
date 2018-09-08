@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rustyeddy/fsutils"
-	log "github.com/sirupsen/logrus"
+	fw "github.com/rustyeddy/firewalker"
 )
 
 type Stats struct {
@@ -24,57 +23,28 @@ var (
 
 	logout   = flag.String("output", "stdout", "Where to send the output from the logger")
 	loglevel = flag.String("level", "warn", "Set the default level to warn")
-	format   = flag.String("format", "json", "Output format color, text, JSON ... ")
+	format   = flag.String("format", "text", "Output format color, text, JSON ... ")
 	nocolors = flag.Bool("no-colors", false, "Output text logging without colors ")
 )
 
 func main() {
 	flag.Parse()
 
-	walker := fsutils.NewWalker(getRootDirs(flag.Args()))
+	walker := fw.NewWalker(getRootDirs(flag.Args()))
 	walker.Verbose = false
-	walker.Logerr = setupLogerr()
+	walker.Logerr = SetupLogerr()
 
-	//log.Fatalf("LOGERR => \n %#v \n", *walker.Logerr.Logger)
+	walker.AddFilter(fw.IndexOnce)
+	walker.AddFilter(fw.CollectStats)
 
 	// Start reading messages
 	go walker.ReadMessages(os.Stderr)
+
+	walker.Infof("Start walking roots %+v...\n", walker.Roots)
 	walker.StartWalking()
 
-	fmt.Println("Main is existing, Goodbye .!. ")
-	fmt.Println(walker.String())
-}
-
-// TODO - Move this to the logerr library ~ Probably pass it a configuration
-// file ...
-func setupLogerr() (l *fsutils.Logerr) {
-	l = fsutils.NewLogerr()
-	if *logout != "stdout" {
-		rd, err := os.Open(*logout)
-		if err != nil {
-			log.Fatalf("failed to open logerr %s", *logout)
-		}
-		l.SetOutput(rd)
-	}
-
-	switch *format {
-	case "json":
-		l.Formatter = &log.JSONFormatter{}
-	case "text":
-		fallthrough
-	default:
-		log.Errorf("expected format (json|text) got (%s) ", *format)
-		l.Formatter = &log.TextFormatter{}
-	}
-	lvl, err := log.ParseLevel(*loglevel)
-	if err != nil {
-		lvl = log.WarnLevel
-	}
-	l.SetLevel(lvl)
-	if *nocolors {
-		//l.DisableColors = true
-	}
-	return l
+	walker.Infoln("Main is existing, Goodbye .!. ")
+	fmt.Println("\t" + walker.String())
 }
 
 // getRootDirs will default to current directory, unless

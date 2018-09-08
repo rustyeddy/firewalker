@@ -1,4 +1,4 @@
-package fsutils
+package firewalker
 
 import (
 	"io"
@@ -25,8 +25,8 @@ func NewLogerr() (l *Logerr) {
 	l.SetLevel(log.DebugLevel)
 	l.Formatter = &log.JSONFormatter{}
 
-	l.Logch = make(chan Message, 5)
-	l.Errch = make(chan Message, 4)
+	l.Logch = make(chan Message)
+	l.Errch = make(chan Message)
 
 	return l
 }
